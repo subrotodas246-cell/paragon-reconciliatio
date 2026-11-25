@@ -1,19 +1,14 @@
 # -*- coding: utf-8 -*-
-import os, re, io, json, hashlib, secrets
+import os, re, json, hashlib, secrets
 from pathlib import Path
 from datetime import datetime, date
 import pandas as pd
 import streamlit as st
-from openpyxl import load_workbook
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from openpyxl.utils import get_column_letter
-from openpyxl.chart import BarChart, Reference
 from pypdf import PdfReader, PdfWriter
 
 st.set_page_config(page_title="Paragon Reconciliation Office | 2026", page_icon="📊", layout="wide")
 
 APP_TITLE = "PARAGON RECONCILIATION OFFICE | 2026"
-ADDRESS = "Paragon House, 5, Mohakhali C/A, Dhaka 1212, Bangladesh"
 TOLERANCE = 0.005
 BASE_DIR = Path("paragon_data")
 PDF_DIR = BASE_DIR / "PDF_Software"
@@ -25,7 +20,6 @@ USERS_FILE = BASE_DIR / "users.json"
 for d in [PDF_DIR, INPUT_PDF_DIR, SALE_DIR, OUT_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
-# ---------------- AUTHENTICATION & ADMIN CONTROL ----------------
 def _password_hash(password, salt):
     return hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 240000).hex()
 
@@ -43,7 +37,6 @@ def load_users():
 def save_users(users):
     USERS_FILE.write_text(json.dumps(users, ensure_ascii=False, indent=2), encoding="utf-8")
 
-# ---------------- CORE HELPER FUNCTIONS ----------------
 def norm_id(v):
     if pd.isna(v): return None
     s = str(v).strip()
@@ -72,7 +65,7 @@ def find_col(df, candidates, label):
     lookup = {str(c).strip().casefold(): c for c in df.columns}
     for x in candidates:
         if x.casefold() in lookup: return lookup[x.casefold()]
-    raise ValueError(f"{label} কলাম পাওয়া যায়নি। পাওয়া কলাম: {list(df.columns)}")
+    raise ValueError(f"{label} কলাম পাওয়া যায়নি।")
 
 def extract_outlet_code(name):
     if pd.isna(name): return None
@@ -216,3 +209,11 @@ def build_bank_from_pdfs():
         df.to_excel(xw, index=False, sheet_name="Summary")
     return len(pdf_files), len(df)
 
+def load_channel(bank_df, sale_df, mapping, channel, all_store_ids, include_bank_exceptions=False):
+    is_mart = channel == "Mart"
+    exceptions = []
+    bdate = find_col(bank_df, ["Txn. Date", "Date", "Transaction Date"], "Bank Date")
+    bstore = find_col(bank_df, ["Store ID", "StoreID"], "Bank Store ID")
+    bamt = find_col(bank_df, ["Total Amount", "Amount", "Bank Amount"], "Bank Amount")
+    bank = pd.DataFrame({
+        "Date": norm_dates(bank_df[bdate]),
