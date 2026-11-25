@@ -38,9 +38,11 @@ def save_users(users):
     USERS_FILE.write_text(json.dumps(users, ensure_ascii=False, indent=2), encoding="utf-8")
 
 def norm_id(v):
-    if pd.isna(v): return None
+    if pd.isna(v):
+        return None
     s = str(v).strip()
-    if not s or s.casefold() in {"nan", "none", "n/a", "na", "null"}: return None
+    if not s or s.casefold() in {"nan", "none", "n/a", "na", "null"}:
+        return None
     try:
         n = float(s.replace(",", ""))
         return str(int(n)) if n.is_integer() else str(n)
@@ -48,11 +50,13 @@ def norm_id(v):
         return s
 
 def parse_date(v):
-    if pd.isna(v) or str(v).strip() == "": return pd.NaT
-    if isinstance(v, (pd.Timestamp, datetime, date)): return pd.Timestamp(v).normalize()
+    if pd.isna(v) or str(v).strip() == "":
+        return pd.NaT
+    if isinstance(v, (pd.Timestamp, datetime, date)):
+        return pd.Timestamp(v).normalize()
     s = str(v).strip()
     try:
-        if len(s) >= 10 and s[:4].isdigit() and s[4] == "-":
+        if len(s) >= 10 and s[:4].isdigit() and s == "-":
             return pd.to_datetime(s, errors="coerce", yearfirst=True).normalize()
         return pd.to_datetime(s, errors="coerce", dayfirst=True).normalize()
     except Exception:
@@ -64,17 +68,22 @@ def norm_dates(s):
 def find_col(df, candidates, label):
     lookup = {str(c).strip().casefold(): c for c in df.columns}
     for x in candidates:
-        if x.casefold() in lookup: return lookup[x.casefold()]
+        if x.casefold() in lookup:
+            return lookup[x.casefold()]
     raise ValueError(f"{label} কলাম পাওয়া যায়নি।")
 
 def extract_outlet_code(name):
-    if pd.isna(name): return None
+    if pd.isna(name):
+        return None
     value = str(name).strip()
-    if not value: return None
+    if not value:
+        return None
     matches = re.findall(r"\(\s*(\d+(?:\.0)?)\s*\)\s*$", value)
-    if matches: return norm_id(matches[-1])
+    if matches:
+        return norm_id(matches[-1])
     match = re.match(r"^\s*(\d+(?:\.0)?)\s+(?=\D)", value)
-    if match: return norm_id(match.group(1))
+    if match:
+        return norm_id(match.group(1))
     return None
 
 def read_mapping(path, sheet):
@@ -94,7 +103,16 @@ def read_mapping(path, sheet):
     return out.dropna(subset=["Outlet Code", "Store ID"])
 
 def _exception(source, row, dt, store, outlet, amount, issue, details):
-    return {"Source": source, "Excel Row": row, "Date": dt, "Store ID": store, "Outlet Code": outlet, "Amount": amount, "Issue": issue, "Details": details}
+    return {
+        "Source": source,
+        "Excel Row": row,
+        "Date": dt,
+        "Store ID": store,
+        "Outlet Code": outlet,
+        "Amount": amount,
+        "Issue": issue,
+        "Details": details
+    }
 
 def find_incomplete_mapping_rows(path, sheet):
     df = pd.read_excel(path, sheet_name=sheet)
@@ -144,7 +162,10 @@ def detect_and_import_pos(uploaded_file):
         "Amount": pd.to_numeric(df[amt_col], errors="coerce"),
         "Date": pd.to_datetime(df[date_col], errors="coerce", dayfirst=True).dt.normalize()
     })
-    fresh["Outlet Code"] = fresh.apply(lambda r: str(r["Outlet Code"]).replace(".0", "").strip() if pd.notna(r["Outlet Code"]) and str(r["Outlet Code"]).strip() else extract_outlet_code(r["Outlet Name"]), axis=1)
+    fresh["Outlet Code"] = fresh.apply(
+        lambda r: str(r["Outlet Code"]).replace(".0", "").strip() if pd.notna(r["Outlet Code"]) and str(r["Outlet Code"]).strip() else extract_outlet_code(r["Outlet Name"]),
+        axis=1
+    )
     fresh = fresh.dropna(subset=["Date", "Amount"])
     fresh = fresh[fresh["Outlet Name"].str.len() > 0]
 
@@ -164,7 +185,8 @@ def detect_and_import_pos(uploaded_file):
         old_dates = pd.to_datetime(old[old_dcol], errors="coerce", dayfirst=True).dt.normalize()
         kept = old.loc[~old_dates.isin(dates)].copy()
         for c in old.columns:
-            if c not in fresh.columns: fresh[c] = None
+            if c not in fresh.columns:
+                fresh[c] = None
         fresh = fresh[old.columns]
         combined = pd.concat([kept, fresh], ignore_index=True)
     else:
@@ -210,10 +232,6 @@ def build_bank_from_pdfs():
     return len(pdf_files), len(df)
 
 def load_channel(bank_df, sale_df, mapping, channel, all_store_ids, include_bank_exceptions=False):
-    is_mart = channel == "Mart"
+    is_mart = (channel == "Mart")
     exceptions = []
     bdate = find_col(bank_df, ["Txn. Date", "Date", "Transaction Date"], "Bank Date")
-    bstore = find_col(bank_df, ["Store ID", "StoreID"], "Bank Store ID")
-    bamt = find_col(bank_df, ["Total Amount", "Amount", "Bank Amount"], "Bank Amount")
-    bank = pd.DataFrame({
-        "Date": norm_dates(bank_df[bdate]),
